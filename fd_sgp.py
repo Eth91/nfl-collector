@@ -122,6 +122,8 @@ def _ddl(con):
       sgp_american INTEGER, implied_indep REAL, implied_joint REAL,
       implied_rho REAL,
       PRIMARY KEY (collected_at, event_id, pair, leg_a_market, leg_b_market));
+    CREATE TABLE IF NOT EXISTS sgp_runs(
+      collected_at TEXT PRIMARY KEY, n_events INTEGER, n_legs INTEGER, hours INTEGER);
     CREATE INDEX IF NOT EXISTS ix_legs_ev ON sgp_legs(event_id, stat);
     """)
 
@@ -145,7 +147,12 @@ def classify(m):
     return None, None
 
 
-def collect_legs(con, limit=None, verbose=True):
+def collect_legs(con, limit=None, verbose=True, hours=96, pace=1.0):
+    """hours: only events kicking off within this window. Props do not exist far
+    out (verified 2026-08-13: the Sept-11 opener had none), so a wide horizon is
+    pure wasted load. 96h matches the existing fbe market poller's convention.
+    pace: seconds between event requests — be considerate, this is someone's API."""
+    import time
     ts = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
     page = get(f"{BASE}/content-managed-page?page=CUSTOM&customPageId=nfl"
                f"&pbHorizonId=nfl&_ak={AK}&timezone=America%2FNew_York")
@@ -156,10 +163,17 @@ def collect_legs(con, limit=None, verbose=True):
     real = [(k, v) for k, v in events.items()
             if v.get("openDate") and "@" in (v.get("name") or "")]
     real.sort(key=lambda kv: kv[1]["openDate"])
+    if hours:
+        cut = dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=hours)
+        real = [(k, v) for k, v in real
+                if dt.datetime.fromisoformat(
+                    v["openDate"].replace("Z", "+00:00")) <= cut]
     if limit:
         real = real[:limit]
     n_leg = n_ev = 0
-    for eid, ev in real:
+    for i, (eid, ev) in enumerate(real):
+        if i and pace:
+            time.sleep(pace)
         try:
             d = get(f"{BASE}/event-page?eventId={eid}&_ak={AK}"
                     f"&timezone=America%2FNew_York")
@@ -167,7 +181,30 @@ def collect_legs(con, limit=None, verbose=True):
             if verbose:
                 print(f"    {eid} {ev.get('name')}: {type(e).__name__}")
             continue
-        mk = d.get("attachments", {}).get("markets", {}) or {}
+        mk = dict(d.get("attachments", {}).get("markets", {}) or {})
+        # ⚠️ THE MAIN EVENT PAGE DOES NOT CONTAIN PLAYER PROPS. They live behind a
+        # TAB, addressed by a slug derived from the tab TITLE (lowercase, spaces ->
+        # hyphens) -- the same mechanism the proven fd_collect.py uses. Fetching
+        # only the main page returns 5 team markets and zero props forever, which
+        # would look exactly like "no props posted".
+        tabs = (d.get("layout", {}) or {}).get("tabs", {}) or {}
+        titles = [(t.get("title") if isinstance(t, dict) else str(t))
+                  for t in tabs.values()]
+        # FETCH EVERY TAB, not a keyword whitelist. A whitelist silently drops
+        # whatever FanDuel renames next — the first version of this caught
+        # "Team Yards" and missed passing/receptions/anytime-TD entirely, giving
+        # 1,031 legs where the full sweep gives far more. ~7 tabs per event is
+        # cheap next to being quietly incomplete.
+        for title in titles:
+            slug = (title or "").lower().replace(" ", "-").replace("'", "")
+            if pace:
+                time.sleep(pace)
+            try:
+                r = get(f"{BASE}/event-page?eventId={eid}&tab={slug}&_ak={AK}"
+                        f"&timezone=America%2FNew_York")
+            except Exception:
+                continue
+            mk.update(r.get("attachments", {}).get("markets", {}) or {})
         n_ev += 1
         for m in mk.values():
             stat, player = classify(m)
@@ -186,8 +223,14 @@ def collect_legs(con, limit=None, verbose=True):
                      1 if m.get("sgmMarket") else 0))
                 n_leg += 1
     con.commit()
+    # HEARTBEAT: prove the RUN happened even when it collected nothing. A loop
+    # that runs and writes zero rows is indistinguishable from a dead loop unless
+    # the run itself is recorded -- the 19h silent-publish outage lesson.
+    con.execute("INSERT OR REPLACE INTO sgp_runs VALUES(?,?,?,?)",
+                (ts, n_ev, n_leg, hours))
+    con.commit()
     if verbose:
-        print(f"  LEGS: {n_leg} rows from {n_ev} events at {ts}")
+        print(f"  LEGS: {n_leg} rows from {n_ev} events within {hours}h at {ts}")
         if n_leg == 0:
             print("  ⚠️ ZERO prop legs. Expected before props are posted (as of "
                   "2026-08-13 the earliest NFL game is 2026-09-11 and no player "
@@ -234,20 +277,25 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--limit", type=int, default=None,
                     help="only the N soonest events (smoke testing)")
+    ap.add_argument("--hours", type=int, default=96,
+                    help="only events kicking off within this window (default 96)")
+    ap.add_argument("--pace", type=float, default=1.0,
+                    help="seconds between event requests (be considerate)")
     ap.add_argument("--status", action="store_true", help="show what is stored")
     a = ap.parse_args()
     con = sqlite3.connect(DB)
     _ddl(con)
     if a.status:
         for q, lbl in (("SELECT COUNT(*), MAX(collected_at) FROM sgp_legs", "legs"),
-                       ("SELECT COUNT(*), MAX(collected_at) FROM sgp_prices", "prices")):
+                       ("SELECT COUNT(*), MAX(collected_at) FROM sgp_prices", "prices"),
+                       ("SELECT COUNT(*), MAX(collected_at) FROM sgp_runs", "runs")):
             n, t = con.execute(q).fetchone()
             print(f"  {lbl:<7} rows={n or 0}  latest={t or 'never'}")
         for stat, n in con.execute(
                 "SELECT stat, COUNT(*) FROM sgp_legs GROUP BY stat ORDER BY 2 DESC"):
             print(f"      {stat:<12} {n}")
         return
-    collect_legs(con, limit=a.limit)
+    collect_legs(con, limit=a.limit, hours=a.hours, pace=a.pace)
     con.close()
 
 
