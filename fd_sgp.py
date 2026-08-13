@@ -34,7 +34,58 @@ WHAT IS VERIFIED (2026-08-13, against the live API)
   * ⚠️ market_id + selection_id is the ONLY unambiguous address of a rung —
     selectionId REPEATS across markets (see fd_betslip.py, measured on 1,409 rows).
 
-WHAT IS **NOT** VERIFIED — THE ONE OPEN ITEM
+## ✅ THE PRICING ENDPOINT — FOUND 2026-08-13, from FanDuel's own published JS
+
+Discovered by reading the site's shipped bundles (`sportsbook.fanduel.com/static/js/
+main.*.js`), NOT by guessing. The call site is explicit:
+
+    getQuoteForChoices: t => _J("/api/sports/fixedodds/transactional/v1/quoteChoices",
+                                {hwm: t.highWaterMark,
+                                 choices: t.choices.join(","),
+                                 eventId: t.rampId})
+      ... e.get(a, {method: "GET", host: RN.QIB, requiresRegion: true,
+                    withCredentials: false, requiresApplicationKey: true})
+
+  ENDPOINT  https://qib.sportsbook.fanduel.com
+            /api/sports/fixedodds/transactional/v1/quoteChoices
+  METHOD    GET
+  AUTH      **withCredentials: false — NO LOGIN REQUIRED.**
+            requiresApplicationKey: true -> the same _ak this module already uses.
+  PARAMS    hwm (highWaterMark), choices (comma-joined), eventId
+  HOSTS     QIB     https://qib.sportsbook.fanduel.com | .ca  (region-less)
+            QIB_BS  https://qib.{STATE}.sportsbook.fanduel.com | .ca
+            ⚠️ .ca matters — bets are placed on FanDuel Canada.
+  SIBLING   /api/sports/fixedodds/transactional/v1/combineChoices  (pricePolicy=BS)
+  RELATED   /api/v1/related-selections, /api/v1/event-selections, /api/v1/selections
+
+VERIFIED LIVE: the endpoint answers HTTP 200 with well-formed JSON —
+{"betCombinations":[], "choiceFailures":[{"failedChoice":"...","failureCode":...}],
+ "maxPayout":0.0, "respCode":"SUCCESS"} — unauthenticated, from a plain curl.
+
+⚠️ NEVER CALL THE SIBLINGS IN THIS NAMESPACE: placeBet, placeChoiceBet, cashoutBet,
+voidBetToken. quoteChoices is a read-only QUOTE and stakes nothing; the others are
+transactional. They live at the same path prefix, so a typo is a real bet.
+
+## ⛔ THE ONE REMAINING UNKNOWN: `eventId` is a **rampId**, not the sbapi eventId
+
+Every attempt returns choiceFailures with failureCode **EVENT_NOT_FOUND**, and it is
+an EVENT-level failure — all three choice encodings (`mkt-sel`, `mkt.sel`, `sel`)
+fail identically, so the choice format is not the blocker. Tested across both QIB
+hosts and four region-param spellings; identical result.
+
+The JS is explicit that the param is fed from `t.rampId`. The sbapi event payload
+contains NO 'ramp' field (0 occurrences) and its event object exposes only
+[competitionId, countryCode, eventId, eventTypeId, inPlay, key, name, openDate,
+primaryMarketId, timezone, videoAvailable]. So the ramp id comes from a surface this
+module does not yet read.
+
+⚠️ STOP GUESSING HERE. That is exactly the boundary this repo has already paid to
+learn twice. ONE browser observation resolves it: open a live game with two prop
+legs in the slip and read the quoteChoices request's actual eventId value off the
+network tab, then map it back to something in the sbapi payload. Everything else is
+already known and working.
+
+WHAT WAS **NOT** VERIFIED BEFORE THIS SECTION
   The SGP PRICING call. As of 2026-08-13 the earliest NFL game is 2026-09-11 and
   **no player props are posted yet**, so there are no prop legs to combine and the
   pricing request cannot be observed. `price_sgp()` below is therefore UNIMPLEMENTED
@@ -247,10 +298,12 @@ def price_sgp(legs):
     silent-zero failure this project keeps paying for.
     """
     raise NotImplementedError(
-        "SGP pricing endpoint not yet discovered — no NFL prop legs exist to "
-        "observe it against (earliest game 2026-09-11). Follow the discovery "
-        "recipe in this module's docstring, then implement. DO NOT GUESS: "
-        "fd_betslip.py records a guessed endpoint that cost a device test.")
+        "quoteChoices IS found and reachable (GET, no auth, _ak only) — see the "
+        "module docstring. The blocker is that its eventId param is a rampId, "
+        "NOT the sbapi eventId: every call returns EVENT_NOT_FOUND at the event "
+        "level, identically for all three choice encodings. One browser "
+        "observation of a real quoteChoices request resolves it. DO NOT GUESS "
+        "further — that boundary has already cost this repo twice.")
 
 
 def implied_rho(p_a, p_b, p_joint):
