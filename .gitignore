@@ -1,0 +1,12 @@
+# generated evidence NEVER goes in git — a committed DB creates push races and
+# makes "is the remote current?" unanswerable (see the tennis-odds-collector
+# blob-war: 3 writers on one binary DB)
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+__pycache__/
+*.pyc
+scratch/
+*.json
+!package.json
