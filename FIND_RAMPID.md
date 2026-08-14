@@ -165,3 +165,29 @@ search `main.*.js` and `dependencies.*.js` for `sgm`, `parlay`, `combin`, `multi
 `priceBoost`, and for the OTHER hosts seen live but never probed —
 `fdx-api`, `scan.{STATE}`, `sib.{STATE}`, `boapi`. One of those templates plus its
 path list should name the endpoint outright.
+
+---
+
+# 🔴 RESOLVED 2026-08-13: SGP pricing is AUTH-GATED. This file's hunt was unwinnable.
+
+From `main.ad921c3333a2f6a8.js` (fetched over plain HTTP, no browser):
+
+    getQuoteForChoices:   GET  .../v1/quoteChoices?hwm=&choices=&eventId=<rampId>
+                          host QIB, requiresApplicationKey, withCredentials:false
+                          NO AUTH
+
+    getCombinationQuoteForChoices:                    <-- THE SGP PRICE
+                          POST .../v1/combineChoices?pricePolicy=BS|undefined
+                          host QIB / QIB_BS, requiresRegion, requiresApplicationKey,
+                          **requiresAuth: TRUE**
+
+**`combineChoices` needs a logged-in session.** Anonymous access reaches only the
+single-choice `quoteChoices`. `price_sgp()` cannot be completed anonymously — that is
+a product decision (run the collector from an authenticated session, or ship leg
+collection only), not a missing parameter.
+
+`rampId` is real but lives ONLY on `quoteChoices`, supplied BY the caller. It was
+never discoverable from the endpoint side, so this file's premise could not have
+succeeded.
+
+⚠️ `placeBet` / `placeChoiceBet` (host QPB, requiresGeoComply) share this path prefix.
