@@ -66,3 +66,56 @@ fires — the list will be short.
 
 ⚠️ `placeBet`, `placeChoiceBet`, `cashoutBet`, `voidBetToken` share the sportsbook
 API surface. Everything above is read-only; never click Place Bet.
+
+---
+
+# PROBE RESULTS 2026-08-13 (no browser, plain script, no login)
+
+✅ **fcq is reachable from the collector and OUR OWN STORED IDS WORK.**
+
+    GET https://fcq.nj.sportsbook.fanduel.com/api/v0.1/validateMarketsEligibility
+        ?marketIds=736.180695014,736.180695020
+    -> 200 {"736.180695014":{"hasCashout":false,...},"736.180695020":{...}}
+
+Those are `sgp_legs.market_id` values straight out of fd_sgp.sqlite. No auth, no
+event id, no translation. That settles the addressing question for good.
+
+❌ **The combined price is NOT on fcq under any guessed name.** All 404 with
+`{"faultcode":"Client","faultstring":"DSC-0021"}`:
+
+    getCombinedPrices calculate quote combine price combinations marketCombinations
+    getPrices combinedPrice getSGMPrice sgm calculateSGM sgmPrice getSgmOdds
+    sgmQuote eligibility getMarketCombinations        (also /api/v1/sgm)
+
+POST to /api/v0.1/{calculate,quote,price,sgm,combine} with bodies
+{marketIds:[...]}, {selectionIds:[...]}, {legs:[{marketId,selectionId}]} -> all
+404/405. Note FanDuel's internal name is **SGM** (Same Game Multi) per the
+`sgmMarket` flag the collector already stores as `sgm_eligible` — SGM-based names
+were tried and none exist either.
+
+## WHERE IT MUST BE — 2 candidates, both need ONE browser observation
+
+Hosts seen on a live SGP page, with request counts, that were never probed:
+
+    smp.nj.sportsbook.fanduel.com   38   getMarketPrices = per-market refresher (ruled out)
+    api.sportsbook.fanduel.com      17   sbapi event-page (known)
+    fdx-api.sportsbook.fanduel.com   6   ** NEVER PROBED **
+    scan.nj.sportsbook.fanduel.com   5   ** NEVER PROBED **
+    sib.nj.sportsbook.fanduel.com    3   ** NEVER PROBED ** (bet slip service?)
+    boapi.sportsbook.fanduel.com     2   ** NEVER PROBED **
+    fcq.nj.sportsbook.fanduel.com    3   eligibility only
+
+1. one of fdx-api / scan / sib / boapi, or
+2. the **WebSocket** (CSP lists `wss://*.sportsbook.fanduel.com`; a live-updating
+   parlay price is exactly what a book streams, and a JS hook cannot catch a socket
+   opened at page load).
+
+## THE 60-SECOND FINISH
+
+DevTools -> Network -> **Fetch/XHR** -> clear -> remove and re-add one betslip leg.
+Under ten requests will list. The one carrying both `734.`/`736.` ids IS the pricing
+call — read its host and path. If none appears, switch the filter to **WS**, reload,
+click the connection, open **Messages**, toggle a leg, and find the frame with the
+market ids.
+
+Then `price_sgp()` is a direct port: same session, same headers, ids passed through.
