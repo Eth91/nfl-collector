@@ -2,3 +2,81 @@
   LEGS: 1031 rows from 16 events within 96h at 2026-08-13T08:06:03+00:00
 === run 2026-08-13T08:30:00Z ===
   LEGS: 1031 rows from 16 events within 96h at 2026-08-13T08:30:01+00:00
+=== run 2026-08-13T09:00:00Z ===
+  LEGS: 1031 rows from 16 events within 96h at 2026-08-13T09:00:00+00:00
+=== run 2026-08-13T09:30:00Z ===
+  LEGS: 1027 rows from 16 events within 96h at 2026-08-13T09:30:00+00:00
+=== run 2026-08-13T10:00:00Z ===
+  LEGS: 1027 rows from 16 events within 96h at 2026-08-13T10:00:00+00:00
+=== run 2026-08-13T10:30:01Z ===
+  LEGS: 1027 rows from 16 events within 96h at 2026-08-13T10:30:01+00:00
+=== run 2026-08-13T11:00:01Z ===
+  LEGS: 1027 rows from 16 events within 96h at 2026-08-13T11:00:01+00:00
+=== run 2026-08-13T11:30:00Z ===
+  LEGS: 1027 rows from 16 events within 96h at 2026-08-13T11:30:01+00:00
+=== run 2026-08-13T12:00:00Z ===
+  LEGS: 1027 rows from 16 events within 96h at 2026-08-13T12:00:00+00:00
+=== run 2026-08-13T12:30:00Z ===
+  LEGS: 1027 rows from 16 events within 96h at 2026-08-13T12:30:00+00:00
+=== run 2026-08-13T13:00:00Z ===
+  LEGS: 859 rows from 16 events within 96h at 2026-08-13T13:00:00+00:00
+=== run 2026-08-13T13:30:00Z ===
+  LEGS: 707 rows from 16 events within 96h at 2026-08-13T13:30:01+00:00
+=== run 2026-08-13T14:00:00Z ===
+  LEGS: 707 rows from 16 events within 96h at 2026-08-13T14:00:00+00:00
+=== run 2026-08-13T14:30:00Z ===
+  LEGS: 706 rows from 16 events within 96h at 2026-08-13T14:30:00+00:00
+=== run 2026-08-13T15:00:01Z ===
+  LEGS: 705 rows from 16 events within 96h at 2026-08-13T15:00:01+00:00
+=== run 2026-08-13T15:30:00Z ===
+  LEGS: 705 rows from 16 events within 96h at 2026-08-13T15:30:00+00:00
+=== run 2026-08-13T16:00:00Z ===
+  LEGS: 707 rows from 16 events within 96h at 2026-08-13T16:00:00+00:00
+=== run 2026-08-13T16:30:00Z ===
+  LEGS: 707 rows from 16 events within 96h at 2026-08-13T16:30:00+00:00
+=== run 2026-08-13T17:00:00Z ===
+  LEGS: 705 rows from 16 events within 96h at 2026-08-13T17:00:00+00:00
+=== run 2026-08-13T17:30:00Z ===
+  LEGS: 703 rows from 16 events within 96h at 2026-08-13T17:30:00+00:00
+=== run 2026-08-13T18:00:00Z ===
+  LEGS: 703 rows from 16 events within 96h at 2026-08-13T18:00:00+00:00
+=== run 2026-08-13T18:30:00Z ===
+  LEGS: 702 rows from 16 events within 96h at 2026-08-13T18:30:00+00:00
+=== run 2026-08-13T19:00:26Z ===
+  LEGS: 704 rows from 16 events within 96h at 2026-08-13T19:00:26+00:00
+=== run 2026-08-13T19:30:00Z ===
+  LEGS: 703 rows from 16 events within 96h at 2026-08-13T19:30:00+00:00
+=== run 2026-08-13T20:00:01Z ===
+  LEGS: 821 rows from 16 events within 96h at 2026-08-13T20:00:01+00:00
+=== run 2026-08-13T20:30:00Z ===
+  LEGS: 939 rows from 16 events within 96h at 2026-08-13T20:30:00+00:00
+=== run 2026-08-13T21:00:01Z ===
+  LEGS: 1060 rows from 16 events within 96h at 2026-08-13T21:00:01+00:00
+=== run 2026-08-13T21:30:00Z ===
+  LEGS: 1059 rows from 16 events within 96h at 2026-08-13T21:30:00+00:00
+=== run 2026-08-13T22:00:00Z ===
+  LEGS: 1179 rows from 16 events within 96h at 2026-08-13T22:00:00+00:00
+=== run 2026-08-13T22:30:00Z ===
+  LEGS: 1295 rows from 16 events within 96h at 2026-08-13T22:30:00+00:00
+=== run 2026-08-13T23:00:00Z ===
+  LEGS: 1301 rows from 16 events within 96h at 2026-08-13T23:00:00+00:00
+=== run 2026-08-13T23:30:00Z ===
+  LEGS: 1071 rows from 16 events within 96h at 2026-08-13T23:30:00+00:00
+=== run 2026-08-14T00:00:00Z ===
+  LEGS: 961 rows from 16 events within 96h at 2026-08-14T00:00:00+00:00
+=== run 2026-08-14T00:30:01Z ===
+  LEGS: 719 rows from 16 events within 96h at 2026-08-14T00:30:01+00:00
+=== run 2026-08-14T01:00:00Z ===
+Traceback (most recent call last):
+  File "/Users/ethandown/nfl-collector/fd_sgp.py", line 356, in <module>
+    main()
+  File "/Users/ethandown/nfl-collector/fd_sgp.py", line 351, in main
+    collect_legs(con, limit=a.limit, hours=a.hours, pace=a.pace)
+  File "/Users/ethandown/nfl-collector/fd_sgp.py", line 208, in collect_legs
+    page = get(f"{BASE}/content-managed-page?page=CUSTOM&customPageId=nfl"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ethandown/nfl-collector/fd_sgp.py", line 157, in get
+    raise RuntimeError(f"curl failed rc={out.returncode} for {url[:110]}")
+RuntimeError: curl failed rc=6 for https://sbapi.ny.sportsbook.fanduel.com/api/content-managed-page?page=CUSTOM&customPageId=nfl&pbHorizonId=nfl&
+=== run 2026-08-14T01:30:01Z ===
+  LEGS: 595 rows from 16 events within 96h at 2026-08-14T01:30:01+00:00

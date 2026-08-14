@@ -1,57 +1,68 @@
-# The last unknown: what `eventId` does quoteChoices actually want?
+# ❌ THE rampId DOES NOT EXIST — this file's original premise was wrong
 
-Everything else about the SGP pricing endpoint is **found and verified**:
+**Superseded 2026-08-13 by live observation on a real FanDuel SGP slip.**
+Kept only so nobody repeats the hunt.
 
-    GET https://qib.sportsbook.fanduel.com
-        /api/sports/fixedodds/transactional/v1/quoteChoices
-        ?hwm=<highWaterMark>&choices=<comma-joined>&eventId=<rampId>&_ak=<key>
+## What the old version claimed
 
-    withCredentials: false   -> NO LOGIN NEEDED
-    requiresApplicationKey   -> the _ak fd_sgp.py already uses
-    Verified live: HTTP 200, well-formed JSON, from a plain curl.
+That SGP pricing was `quoteChoices` on `qib.sportsbook.fanduel.com?eventId=<rampId>`,
+that every event id returned `EVENT_NOT_FOUND`, and that the last unknown was how
+FanDuel's `t.rampId` maps to the sbapi event id.
 
-The **only** blocker: FanDuel's own JS feeds that param from `t.rampId`, and the
-sbapi's event id is not it. Every call returns `EVENT_NOT_FOUND` — an EVENT-level
-failure, identical across all three choice encodings (`mkt-sel`, `mkt.sel`,
-`sel`), both QIB hosts and four region spellings. So the choice format is fine;
-the event identity is wrong.
+## What is actually true
 
-## Already ruled out (do not redo)
+**QIB / `quoteChoices` is the WRONG SERVICE.** SGP lives on a different host:
 
-* sbapi `event-page` payload contains **zero** occurrences of "ramp"; its event
-  object exposes only competitionId, countryCode, eventId, eventTypeId, inPlay,
-  key, name, openDate, primaryMarketId, timezone, videoAvailable.
-* `/api/v1/event-selections`, `/api/v1/selections`, `/api/v1/related-selections`
-  on `api.sportsbook.fanduel.com` -> **404** (they live behind some other prefix).
-* `/api/event-selections` on the sbapi host -> `{"error":true}`.
+    fcq.nj.sportsbook.fanduel.com        <- "Fixed Combination Quotes"
 
-## 30-second recipe — paste into the browser console
+Confirmed live, two legs in a real slip pricing at $10 -> $10.35:
 
-Open any live NFL game on sportsbook.fanduel.com that has player props, put **two
-prop legs in the bet slip** (this stakes NOTHING — do not click Place Bet), then
-paste this into DevTools console:
+    GET https://fcq.nj.sportsbook.fanduel.com/api/v0.1/validateMarketsEligibility
+        ?marketIds=734.180919113
+    GET https://fcq.nj.sportsbook.fanduel.com/api/v0.1/validateMarketsEligibility
+        ?marketIds=734.180919113%2C734.180919149     <- both legs, comma-joined
 
-```js
-performance.getEntriesByType('resource')
-  .map(e => e.name)
-  .filter(u => /quoteChoices|combineChoices/.test(u))
-  .forEach(u => console.log(decodeURIComponent(u)));
-```
+🔑 **IT TAKES A PLAIN COMMA-JOINED `marketIds` LIST AND NO EVENT ID AT ALL.**
+That is why `quoteChoices?eventId=` could never work and why the rampId was
+unfindable: fcq addresses legs by MARKET ID, so no event identity is ever needed.
+There was nothing to map.
 
-Resource timing survives reloads, which a fetch hook does not — this is the same
-technique that found the PFF weekly API.
+## Also ruled out on the same observation
 
-Read the `eventId=` value off the logged URL and compare it to the sbapi event id
-for that same game (fd_sgp.py stores it as `sgp_legs.event_id`). Two outcomes:
+* `smp.nj.sportsbook.fanduel.com/api/sports/fixedodds/readonly/v1/getMarketPrices`
+  (38 of 79 page requests, called 10x) is a RED HERRING — body is just
+  `{"marketIds":[...]}`, a per-market price refresher with no combination logic.
+* `performance.getEntriesByType('resource')` shows the fcq + smp calls, so the
+  recipe in the old file worked; it was looking for the wrong endpoint name.
 
-* **the two match** -> the blocker was the region/`hwm` binding after all, and the
-  logged URL shows the correct spelling; copy its full param set verbatim.
-* **they differ** -> that value IS the rampId. Note how it relates to the sbapi id
-  (offset? different namespace? present in some other payload field?) and put the
-  mapping in `price_sgp()`.
+## ID FORMAT — the collector already speaks it
 
-Then implement `price_sgp()` and the collector is complete.
+    collector sgp_legs:  market_id 736.180695020   selection_id 92797968
+    fcq in the wild:               734.180919113
 
-⚠️ `placeBet`, `placeChoiceBet`, `cashoutBet`, `voidBetToken` share this path
-prefix. `quoteChoices` is a read-only quote and stakes nothing; a typo into a
-sibling is a real bet.
+Same `NNN.NNNNNNNNN` shape. The `736.` vs `734.` prefix is a MARKET-TYPE namespace
+(different market types), not a host/region difference — 0 of 33,367 stored rows
+carry `734.` because the collector has not captured those market types. So
+`price_sgp()` can pass stored market_ids straight through: no translation needed.
+
+## ⚠️ THE ONE REMAINING UNKNOWN
+
+**Which fcq endpoint returns the COMBINED PRICE.** `validateMarketsEligibility` only
+answers "can these legs be combined". A broad fetch/XHR capture (all non-static
+requests) did NOT catch a pricing call, which leaves two candidates:
+
+1. another `fcq` path (try `/api/v0.1/` + calculate / quote / combine / price), or
+2. **the WebSocket** — the page CSP lists `wss://*.sportsbook.fanduel.com`, and a
+   live-updating parlay price is exactly what a book streams. A script hook CANNOT
+   catch this after the fact: the socket opens on page load, before any hook exists.
+
+## HOW TO FINISH IT (no scripting)
+
+DevTools -> **Network** -> filter **WS** -> click the connection -> **Messages**,
+then remove and re-add a leg. Look for a frame containing a `734.` market id.
+If the price is streamed, that frame shows the request shape. If nothing appears on
+WS, re-filter Network to **Fetch/XHR**, clear it, toggle a leg, and read whatever
+fires — the list will be short.
+
+⚠️ `placeBet`, `placeChoiceBet`, `cashoutBet`, `voidBetToken` share the sportsbook
+API surface. Everything above is read-only; never click Place Bet.
