@@ -119,3 +119,49 @@ click the connection, open **Messages**, toggle a leg, and find the frame with t
 market ids.
 
 Then `price_sgp()` is a direct port: same session, same headers, ids passed through.
+
+---
+
+# ⚠️ CORRECTION 2026-08-13 (later): fcq IS THE CASHOUT SERVICE, NOT SGP
+
+The section above expands FCQ as "Fixed Combination Quotes". **That was a guess and
+it is WRONG.** FanDuel's own error class says it:
+
+    {"faultstring":"FCQSX-0005","detail":{"FixedOddsCashoutQuoteServiceException":
+     {"errorCode":"FORBIDDEN"}}}
+
+**FCQ = Fixed odds CASHOUT Quote.**
+
+Consequences — two earlier readings were over-claimed:
+
+* `validateMarketsEligibility` -> `{"736.x":{"hasCashout":false,"hasEWCashout":false}}`
+  is **CASHOUT eligibility**, not SGP eligibility. It appeared while an SGP was being
+  built, which is why it looked like the SGP path. It is not.
+* `/api/v0.1/getBetQuotes` (found in `dependencies.*.js`) exists — 400 DSC-0018 on
+  every param shape tried, and 403 FORBIDDEN on `betIds`. It quotes CASHOUT prices
+  for EXISTING bets and needs account auth. **Not the SGP pricing endpoint, and not
+  something to keep probing.**
+
+Param shapes tried on getBetQuotes, all 400 DSC-0018: GET marketIds / selectionIds /
+both / legs=`mid-sel` / selections=`mid:sel` / +priceHistory; POST {selections},
+{legs}, {bets:[{legs}]}, {quotes:[{selections}]}, {marketIds,selectionIds}, bare array.
+
+## WHAT SURVIVES (still true and still useful)
+
+* fcq is reachable from a plain script with NO login, and it accepts the collector's
+  OWN `736.` market ids. So FanDuel's fixed-odds services address markets by
+  market_id with no event id — the rampId genuinely does not exist.
+* Host template from `main.*.js`: `fcq.{STATE}.sportsbook.fanduel.com` (also
+  `.fanduel.ca`), so the region is a simple slot.
+* The JS bundle is READABLE without a browser:
+  `https://sportsbook.fanduel.com/football` -> 11 script urls under /static/js/.
+  Grepping `dependencies.*.js` is how getBetQuotes / getEligibleBets were found.
+  **This is the right tool for finding the real endpoint — no browser needed.**
+
+## NEXT STEP (unchanged in substance, better tooling)
+
+Grep the SAME bundles for the SGM/parlay pricing path rather than guessing names:
+search `main.*.js` and `dependencies.*.js` for `sgm`, `parlay`, `combin`, `multi`,
+`priceBoost`, and for the OTHER hosts seen live but never probed —
+`fdx-api`, `scan.{STATE}`, `sib.{STATE}`, `boapi`. One of those templates plus its
+path list should name the endpoint outright.
