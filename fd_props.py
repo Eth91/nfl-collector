@@ -35,6 +35,11 @@ import requests
 AK = os.environ.get("FD_AK", "FhMFpcPWXMeyZxOx")
 STATE = os.environ.get("FD_STATE", "ny")
 BASE = f"https://sbapi.{STATE}.sportsbook.fanduel.com/api"
+# NCAAF player props are HIDDEN on every US state host (state bans) but LISTED on FanDuel Ontario —
+# the .ca catalog the user actually bets on. Verified 2026-09-05: PLAYER_MEDIUM_{RECEIVING,RUSHING,
+# PASSING}_YARDS_CFB two-sided + ALT ladders on sbapi.on.sportsbook.fanduel.ca. NFL stays on the US host.
+BASE_BY_LEAGUE = {"nfl": BASE,
+                  "ncaaf": os.environ.get("FD_NCAAF_BASE", "https://sbapi.on.sportsbook.fanduel.ca/api")}
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 H = {"User-Agent": UA, "Accept": "application/json"}
@@ -128,6 +133,9 @@ def parse_market(m):
     name = m.get("marketName") or ""
     out = []
     runners = m.get("runners") or []
+    core = mt[:-4] if mt.endswith("_CFB") else mt      # college market types carry a _CFB suffix
+    if core in TD_MAP:
+        mt = core
     if mt in TD_MAP:
         for r in runners:
             a = ((r.get("winRunnerOdds") or {}).get("americanDisplayOdds") or {}).get("americanOddsInt")
@@ -135,6 +143,8 @@ def parse_market(m):
                 continue
             out.append((TD_MAP[mt], r.get("runnerName"), "yes", 0.5, int(a), r.get("runnerName")))
         return out
+    if core in GAME_MAP and core != mt and "TOTAL_" not in mt:
+        mt = core
     if mt in GAME_MAP or mt.endswith("_CFB") and ("TOTAL_" in mt):
         # game / team markets: runner = team or Over/Under, line = handicap (alt: "50+"/"Over 45.5")
         market = GAME_MAP.get(mt, "team_" + mt.lower().replace("_-_o/u_cfb", "").replace("_cfb", ""))
@@ -157,7 +167,7 @@ def parse_market(m):
             out.append((market, name.split(" - ")[0].strip() if " - " in name else name,
                         side, line, int(a), rn))
         return out
-    if not mt.startswith("PLAYER_X_"):
+    if not mt.startswith(("PLAYER_X_", "PLAYER_MEDIUM_", "PLAYER_HIGH_", "PLAYER_LOW_")):
         return out
     canon = next((c for k, c in STAT_MAP if k in mt), None)
     player = name.split(" - ")[0].strip() if " - " in name else None
@@ -202,8 +212,9 @@ def poll(league, hours, sweep_min, limit, verbose):
     now = dt.datetime.now(dt.timezone.utc)
     stamp = now.isoformat(timespec="seconds")
     pid = PAGE[league]
+    base = BASE_BY_LEAGUE.get(league, BASE)
     try:
-        page = get(f"{BASE}/content-managed-page?page=CUSTOM&customPageId={pid}"
+        page = get(f"{base}/content-managed-page?page=CUSTOM&customPageId={pid}"
                    f"&pbHorizonId={pid}&_ak={AK}&timezone=America%2FNew_York", stats)
     except Exception as exc:
         con.execute("INSERT OR REPLACE INTO fd_runs VALUES (?,?,?,?,?,?,?,?)",
@@ -244,7 +255,7 @@ def poll(league, hours, sweep_min, limit, verbose):
     for eid, v, mins, band, ladder in todo:
         rows, err, tabs_done = {}, None, 0
         try:
-            d = get(f"{BASE}/event-page?eventId={eid}&_ak={AK}&timezone=America%2FNew_York", stats)
+            d = get(f"{base}/event-page?eventId={eid}&_ak={AK}&timezone=America%2FNew_York", stats)
             mk = dict((d.get("attachments") or {}).get("markets") or {})
             titles = [(t.get("title") if isinstance(t, dict) else str(t))
                       for t in ((d.get("layout") or {}).get("tabs") or {}).values()]
@@ -259,7 +270,7 @@ def poll(league, hours, sweep_min, limit, verbose):
                 seen.add(slug)
                 time.sleep(PACE)
                 try:
-                    r = get(f"{BASE}/event-page?eventId={eid}&tab={slug}&_ak={AK}"
+                    r = get(f"{base}/event-page?eventId={eid}&tab={slug}&_ak={AK}"
                             f"&timezone=America%2FNew_York", stats)
                     mk.update((r.get("attachments") or {}).get("markets") or {})
                     tabs_done += 1
